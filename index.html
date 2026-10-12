@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AP1 · 交互式 2D 分形（Sierpinski 垫片 + 扩展）</title>
+<style>
+  :root { --panel-bg:#10141d; --panel-fg:#dfe6f0; --accent:#4fc3f7; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; }
+  body { font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:#06080d; color:var(--panel-fg); overflow:hidden; }
+  #app { display:flex; height:100vh; }
+  #panel { width:300px; flex:none; background:var(--panel-bg); padding:14px 16px 20px; overflow-y:auto; border-right:1px solid #232b3a; }
+  #panel h1 { font-size:15px; letter-spacing:.3px; }
+  #panel .sub { font-size:11px; color:#8b97a8; margin:4px 0 14px; }
+  .sec { margin-bottom:15px; }
+  .sec-title { font-size:12px; color:#8b97a8; margin-bottom:7px; letter-spacing:.5px; }
+  .row { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; font-size:13px; }
+  .row label { flex:1; }
+  .row .val { color:var(--accent); font-variant-numeric:tabular-nums; width:56px; text-align:right; font-size:12px; }
+  .row + input[type=range] { margin-bottom:2px; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  select, button { width:100%; background:#1a2230; color:var(--panel-fg); border:1px solid #2b3547; border-radius:6px; padding:6px 8px; font-size:13px; outline:none; }
+  select:hover, button:hover { border-color:#3a4a63; }
+  button { cursor:pointer; }
+  button:active { background:#243047; }
+  .radios { display:flex; gap:6px; }
+  .radios label { flex:1; text-align:center; font-size:12px; padding:6px 0; border:1px solid #2b3547; border-radius:6px; cursor:pointer; user-select:none; }
+  .radios input { display:none; }
+  .radios label:has(input:checked) { border-color:var(--accent); background:#16222f; }
+  .radios input:checked + span { color:var(--accent); font-weight:600; }
+  .hint { font-size:11px; color:#6f7c8f; margin-top:5px; line-height:1.6; }
+  .hint b { color:#9fb0c4; font-weight:600; }
+  #viewport { flex:1; position:relative; display:flex; flex-direction:column; }
+  canvas { flex:1; width:100%; height:100%; display:block; outline:none; cursor:grab; }
+  canvas.dragging { cursor:grabbing; }
+  #status { position:absolute; left:12px; bottom:10px; font-size:12px; color:#9fb0c4; background:rgba(8,10,16,.6); padding:6px 10px; border-radius:6px; pointer-events:none; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>AP1 · 交互式 2D 分形</h1>
+    <div class="sub">混沌游戏 / 递归细分 · WebGL 2.0 · 含四面体与分形浏览器扩展</div>
+
+    <div class="sec">
+      <div class="sec-title">场景</div>
+      <select id="ctl-scene">
+        <option value="gasket">2D 垫片（Sierpinski）</option>
+        <option value="tetra">3D 四面体 Gasket（扩展 E3）</option>
+        <option value="fractal">Mandelbrot / Julia（扩展 E2）</option>
+      </select>
+    </div>
+
+    <div class="sec hidden" id="sec-alg">
+      <div class="sec-title">生成算法</div>
+      <div class="radios">
+        <label><input type="radio" name="alg" value="chaos" checked><span>混沌游戏</span></label>
+        <label><input type="radio" name="alg" value="subdiv"><span>递归细分</span></label>
+      </div>
+    </div>
+
+    <div class="sec" id="sec-mode">
+      <div class="sec-title">渲染模式（快捷键 1 / 2 / 3）</div>
+      <div class="radios">
+        <label><input type="radio" name="mode" value="points" checked><span>点云</span></label>
+        <label><input type="radio" name="mode" value="lines"><span>线框</span></label>
+        <label><input type="radio" name="mode" value="triangles"><span>实体</span></label>
+      </div>
+    </div>
+
+    <div class="sec hidden" id="sec-points">
+      <div class="row"><label>顶点数（混沌游戏）</label><span class="val" id="val-points">8000</span></div>
+      <input type="range" id="ctl-points" min="1000" max="20000" step="500" value="8000">
+      <div class="hint">作业要求 ≥ 5000；初始点随机，每次重新生成结果略有不同。</div>
+    </div>
+
+    <div class="sec hidden" id="sec-depth">
+      <div class="row"><label>递归深度</label><span class="val" id="val-depth">5</span></div>
+      <input type="range" id="ctl-depth" min="0" max="8" step="1" value="5">
+      <div class="hint">深度 d 生成 3<sup>d</sup> 个三角形；深度 ≥ 4 不崩溃。</div>
+    </div>
+
+    <div class="sec hidden" id="sec-ngon">
+      <div class="row"><label>多边形边数 n（扩展 E1）</label><span class="val" id="val-ngon">3</span></div>
+      <input type="range" id="ctl-ngon" min="3" max="8" step="1" value="3">
+      <div class="row"><label>收缩比 r</label><span class="val" id="val-ratio">0.50</span></div>
+      <input type="range" id="ctl-ratio" min="0.30" max="0.90" step="0.01" value="0.50">
+      <div class="hint">n=3、r=0.5 即经典 Sierpinski；n≥4 需配合不同 r 观察自相似 / 填充差异。</div>
+    </div>
+
+    <div class="sec" id="sec-common">
+      <div class="row"><label>点大小</label><span class="val" id="val-psize">4</span></div>
+      <input type="range" id="ctl-psize" min="1" max="16" step="1" value="4">
+      <div class="row"><label>配色方案</label></div>
+      <select id="ctl-palette">
+        <option value="0">青蓝</option>
+        <option value="1">熔岩</option>
+        <option value="2">霓虹</option>
+        <option value="3">石墨</option>
+      </select>
+    </div>
+
+    <div class="sec hidden" id="sec-tetra">
+      <div class="row"><label>四面体递归深度</label><span class="val" id="val-tdepth">3</span></div>
+      <input type="range" id="ctl-tdepth" min="0" max="5" step="1" value="3">
+      <div class="row"><label><input type="checkbox" id="ctl-tauto" checked style="width:auto"> 自动旋转</label></div>
+      <div class="hint">拖拽旋转视角，滚轮拉近 / 拉远。</div>
+    </div>
+
+    <div class="sec hidden" id="sec-fractal">
+      <div class="sec-title">分形类型</div>
+      <select id="ctl-fkind">
+        <option value="mandelbrot">Mandelbrot 集</option>
+        <option value="julia">Julia 集</option>
+      </select>
+      <div class="row" style="margin-top:9px"><label>迭代次数</label><span class="val" id="val-fiter">200</span></div>
+      <input type="range" id="ctl-fiter" min="32" max="500" step="8" value="200">
+      <div class="row"><label>调色板（快捷键 1 / 2 / 3）</label></div>
+      <select id="ctl-fpalette">
+        <option value="0">火焰</option>
+        <option value="1">冰蓝</option>
+        <option value="2">紫罗兰</option>
+        <option value="3">荧光绿</option>
+      </select>
+      <div class="row" style="margin-top:9px"><label>Julia c.re</label><span class="val" id="val-jcx">-0.80</span></div>
+      <input type="range" id="ctl-jcx" min="-1.00" max="1.00" step="0.01" value="-0.80">
+      <div class="row"><label>Julia c.im</label><span class="val" id="val-jcy">0.16</span></div>
+      <input type="range" id="ctl-jcy" min="-1.00" max="1.00" step="0.01" value="0.16">
+      <div class="row"><label><input type="checkbox" id="ctl-janim" style="width:auto"> Julia 参数动画（空格键）</label></div>
+      <div class="hint">拖拽平移、滚轮缩放、放大到任意细节。</div>
+    </div>
+
+    <div class="sec">
+      <button id="ctl-regen">重新生成（R）</button>
+      <button id="ctl-reset" style="margin-top:7px">重置视角（0）</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">快捷键</div>
+      <div class="hint">
+        <b>1 / 2 / 3</b> 渲染模式切换（垫片 / 四面体），分形场景切换调色板<br>
+        <b>空格</b> 逐点生长暂停 / 继续（分形场景为 Julia 动画开关）<br>
+        <b>R</b> 重新生成　<b>0</b> 重置视角<br>
+        <b>左键拖拽</b> 平移　<b>滚轮</b> 缩放
+      </div>
+    </div>
+  </aside>
+
+  <main id="viewport">
+    <canvas id="glcanvas" tabindex="0"></canvas>
+    <div id="status">初始化…</div>
+  </main>
+</div>
+
+<!-- ==================== 着色器（GLSL ES 3.00，WebGL 2.0） ==================== -->
+
+<script type="x-shader/x-vertex" id="vs2d">
+#version 300 es
+in vec2 aPosition;
+uniform mat4 uTransform;
+uniform float uPointSize;
+void main() {
+  gl_Position = uTransform * vec4(aPosition, 0.0, 1.0);
+  gl_PointSize = uPointSize;
+}
+</script>
+
+<script type="x-shader/x-fragment" id="fs2d">
+#version 300 es
+precision mediump float;
+uniform vec4 uColor;
+uniform float uRoundPoints;
+out vec4 fragColor;
+void main() {
+  // 点云模式下把方形点裁成圆形（仅 POINTS 图元启用）
+  if (uRoundPoints > 0.5) {
+    vec2 d = gl_PointCoord - vec2(0.5);
+    if (dot(d, d) > 0.25) discard;
+  }
+  fragColor = uColor;
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vs3d">
+#version 300 es
+in vec3 aPosition;
+in vec3 aNormal;
+uniform mat4 uProj;
+uniform mat4 uModel;
+uniform float uPointSize;
+out vec3 vNormal;
+void main() {
+  vec4 p = uModel * vec4(aPosition, 1.0);
+  gl_Position = uProj * p;
+  vNormal = mat3(uModel) * aNormal;
+  gl_PointSize = uPointSize;
+}
+</script>
+
+<script type="x-shader/x-fragment" id="fs3d">
+#version 300 es
+precision mediump float;
+in vec3 vNormal;
+uniform vec4 uColor;
+uniform vec3 uLightDir;
+uniform float uFlat;   // 1.0 = 纯色（线框/点云）；0.0 = 简单漫反射明暗
+out vec4 fragColor;
+void main() {
+  if (uFlat > 0.5) { fragColor = uColor; return; }
+  vec3 n = normalize(vNormal);
+  float d = max(abs(dot(n, normalize(uLightDir))), 0.0);
+  fragColor = vec4(uColor.rgb * (0.35 + 0.65 * d), 1.0);
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vsf">
+#version 300 es
+// 全屏三角形：用 gl_VertexID 生成，无需顶点缓冲
+out vec2 vNdc;
+void main() {
+  vec2 p = vec2(-1.0);
+  if (gl_VertexID == 1) p = vec2(3.0, -1.0);
+  else if (gl_VertexID == 2) p = vec2(-1.0, 3.0);
+  vNdc = p;
+  gl_Position = vec4(p, 0.0, 1.0);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="fsf">
+#version 300 es
+precision highp float;
+in vec2 vNdc;
+out vec4 fragColor;
+uniform vec2 uCenter;     // 复平面视口中心
+uniform float uHalfH;     // 视口半高（复平面单位）
+uniform float uAspect;    // 画布宽高比
+uniform int  uMaxIter;    // 最大迭代次数
+uniform int  uKind;       // 0 = Mandelbrot，1 = Julia
+uniform vec2 uC;          // Julia 参数
+uniform vec3 uPal0, uPal1, uPal2;
+void main() {
+  // 屏幕坐标 → 复平面坐标
+  vec2 z0 = vec2(uCenter.x + vNdc.x * uAspect * uHalfH,
+                 uCenter.y + vNdc.y * uHalfH);
+  vec2 z  = (uKind == 0) ? vec2(0.0) : z0;
+  vec2 c  = (uKind == 0) ? z0 : uC;
+
+  int  i  = uMaxIter;
+  float m2 = 0.0;
+  for (int n = 0; n < uMaxIter; n++) {
+    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+    m2 = dot(z, z);
+    if (m2 > 4.0) { i = n; break; }   // |z| > 2 必发散，判为逃逸
+  }
+
+  if (i == uMaxIter) {                  // 未逃逸 → 集合内部
+    fragColor = vec4(uPal0 * 0.22, 1.0);
+    return;
+  }
+  // 平滑着色（连续化逃逸时间）
+  float mu = float(i) + 1.0 - log2(0.5 * log2(m2));
+  float t  = clamp(mu / float(uMaxIter), 0.0, 1.0);
+  vec3 col = (t < 0.5) ? mix(uPal0, uPal1, t * 2.0)
+                       : mix(uPal1, uPal2, (t - 0.5) * 2.0);
+  fragColor = vec4(col, 1.0);
+}
+</script>
+
+<!-- ==================== 教材配套工具库（Angel & Shreiner 8E Common） ==================== -->
+<script type="text/javascript" src="Common/MV.js"></script>
+<script type="text/javascript" src="Common/flatten.js"></script>
+<script type="text/javascript" src="Common/initShaders.js"></script>
+
+<!-- ==================== 业务代码：几何 / 交互 / UI / 主程序 分文件 ==================== -->
+<script type="text/javascript" src="js/geometry.js"></script>
+<script type="text/javascript" src="js/interaction.js"></script>
+<script type="text/javascript" src="js/ui.js"></script>
+<script type="text/javascript" src="js/main.js"></script>
+</body>
+</html>
