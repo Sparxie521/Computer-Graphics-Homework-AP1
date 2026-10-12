@@ -2,11 +2,7 @@
 
 计算机图形学课程作业 AP1 完整实现。基于 WebGL 2.0（GLSL ES 3.00），使用教材
 《Interactive Computer Graphics》（Angel & Shreiner，8E）配套的 Common 库
-（MV.js / flatten.js / initShaders.js / utility.js），**未使用 Three.js**。
-必做部分满分实现，三个选做（E1 / E2 / E3）全部完成。
-
----
-
+（MV.js / flatten.js / initShaders.js / utility.js），
 ## 一、快速开始
 
 项目为纯静态网页，无需构建。
@@ -24,64 +20,11 @@ python -m http.server 8080
 > 跨域限制导致着色器无法加载），用任意静态服务器均可（`npx serve`、VSCode
 > Live Server 等）。
 
-### 公网部署（三选一，均免费）
-
-**方式 A · GitHub Pages（推荐，最稳）**
-
-1. 在 GitHub 新建仓库（如 `ap1-sierpinski`），公开或私有均可。
-2. 上传本项目全部文件（含 `index.html`、`js/`、`Common/`、`screenshots/`），
-   可用网页拖拽上传，或命令行：
-
-   ```powershell
-   git init
-   git add .
-   git commit -m "AP1 sierpinski"
-   git branch -M main
-   git remote add origin https://github.com/<你的用户名>/ap1-sierpinski.git
-   git push -u origin main
-   ```
-
-3. 仓库 Settings → Pages → Source 选 `main` 分支 / root 目录 → Save。
-   等待 1–2 分钟，访问 `https://<你的用户名>.github.io/ap1-sierpinski/` 即公网 URL。
-
-**方式 B · Vercel / Netlify**
-
-- Vercel：`vercel` 官网注册后，Import 该仓库，或安装 CLI 后 `vercel --prod`。
-- Netlify：官网 → Add new site → Deploy manually，把本项目文件夹拖进
-  Drop zone 即可，完成后得到 `https://xxx.netlify.app`。
-
-**方式 C · 临时静态托管（演示用）**
-
-- 把整个 `ap1-sierpinski` 文件夹拖到 netlify drop、surge.sh（`surge` 命令）
-  等，几十秒即可拿到临时公网 URL。
-
 ---
 
-## 二、实现内容与评分点对照
+## 二、两种算法原理
 
-| 作业要求（必做 8 分） | 实现位置 | 状态 |
-|---|---|---|
-| 混沌游戏，点数 ≥ 5000，`gl.POINTS` 绘制 | `js/geometry.js` `Geom.chaosPoints()`；`js/main.js` `drawGasket()` | ✅ 默认 8000 点，逐点生长动画 |
-| `subdivide(triangle, depth)`，支持深度输入 | `js/geometry.js` `Geom.subdivideGasket(depth)` | ✅ 深度 0–8 可调，`3^depth` 个三角形 |
-| 三种渲染模式：点云 / 线框 / 实体 | 面板单选 + 键盘 `1` / `2` / `3` | ✅ P / L / T 三模式 |
-| 参数面板：点数、深度、点大小、配色、模式切换 | `index.html` + `js/ui.js` | ✅ 全部控件与实时联动 |
-| ≥ 3 套配色 | `js/main.js` `SCHEMES`（4 套）+ 分形 `FPALS`（4 套） | ✅ 青蓝 / 熔岩 / 霓虹 / 石墨 |
-| 左键拖拽平移、滚轮缩放（自行监听 mousedown/mousemove/wheel） | `js/interaction.js` | ✅ 锚点缩放（光标下的点不动） |
-| 键盘 1/2/3 切模式、空格暂停/继续逐点生长 | `js/interaction.js` + `js/main.js` | ✅ |
-| 代码质量：结构清晰、几何/交互/UI 分文件 | 见「代码结构」 | ✅ |
-| 交付：公网 URL + 源码 zip + README + 三种模式截图各一张 | `screenshots/` | ✅ |
-
-| 选做（+2 分封顶） | 说明 |
-|---|---|
-| E1 任意 n 边形混沌游戏 | `js/geometry.js` `Geom.polygonVertices(n)`；面板可调边数 `n` 与收缩比 `r`。n=3、r=0.5 即经典 Sierpinski |
-| E2 Mandelbrot / Julia 探索器 | 全屏片段着色器（`vsf/fsf`），迭代次数、4 套调色板、Julia 参数 `c` 实时滑块、空格键 Julia 参数动画、拖拽/缩放无限放大 |
-| E3 3D 四面体 Gasket | `Geom.subdivideTetra(depth)`（三维推广：递归挖去中心四面体），透视投影 + 深度测试 + 自动旋转 + 拖拽旋转视角，P/L/T 三模式 |
-
----
-
-## 三、两种算法原理
-
-### 3.1 混沌游戏（Chaos Game，Sierpinski 垫片）
+### 2.1 混沌游戏（Chaos Game，Sierpinski 垫片）
 
 **算法**：任取三角形三顶点 `v0, v1, v2` 与一个随机初始点 `p0`，反复迭代：
 
@@ -101,23 +44,13 @@ Float32Array 供 `gl.POINTS` 一次绘制；初始点随机，因此「重新生
 > 课上可答：这本质是**迭代函数系统（IFS）**——一组仿射压缩映射
 > `f_i(x) = r·x + (1−r)·v_i` 的吸引子，Hutchinson 定理保证其存在唯一性。
 
-### 3.2 递归细分（Recursive Subdivision）
+### 2.2 递归细分（Recursive Subdivision）
 
 **算法**：`subdivide(triangle, depth)` 对三角形 `a, b, c` 递归：
 
 - `depth = 0`：直接输出该三角形（实体模式）。
 - `depth > 0`：取三边中点 `mab, mbc, mca`，挖掉中间的小三角形，
   对剩下的三个角三角形各递归一次（`depth−1`）。
-
-```
-            a
-           / \
-          /   \
-      mab ———— mca        ← 挖掉中间阴影小三角
-        /  ✕  \
-       /       \
-      b ———— mbc ———— c   ← 注：c 与 mbc 之间在原文示意中为连线
-```
 
 `depth = d` 生成 `3^d` 个三角形（顶点经索引去重），与经典结论一致：
 d=0→1、d=1→3、d=2→9、…、d=5→243。
@@ -129,7 +62,7 @@ d=0→1、d=1→3、d=2→9、…、d=5→243。
 
 ---
 
-## 四、交互说明
+## 三、交互说明
 
 | 操作 | 效果 |
 |---|---|
@@ -143,7 +76,7 @@ d=0→1、d=1→3、d=2→9、…、d=5→243。
 
 ---
 
-## 五、三种模式截图
+## 四、三种模式截图
 
 - **点云**（混沌游戏 8,000 点）：`screenshots/s2-chaos-points.png`
 - **线框**（递归细分 depth=5，1,458 条边）：`screenshots/s3-subdiv-lines.png`
