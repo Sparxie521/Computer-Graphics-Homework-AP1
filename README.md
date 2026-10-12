@@ -12,13 +12,7 @@
 ```powershell
 cd ap1-sierpinski
 python -m http.server 8080
-```
-
-然后浏览器打开：<http://localhost:8080/index.html>
-
-> 说明：WebGL 页面必须通过 HTTP 服务访问（直接双击 `file://` 打开可能因
-> 跨域限制导致着色器无法加载），用任意静态服务器均可（`npx serve`、VSCode
-> Live Server 等）。
+`
 
 ---
 
@@ -40,9 +34,6 @@ p_{k+1} = p_k + r · (v_i − p_k)   （每步随机选 v_i，r = 0.5）
 每次迭代生成两个点（对称技巧：取 `p` 与 `1−p` 镜像），把点直接写入
 Float32Array 供 `gl.POINTS` 一次绘制；初始点随机，因此「重新生成」
 每次结果细节不同（这是混沌过程的正确表现）。
-
-> 课上可答：这本质是**迭代函数系统（IFS）**——一组仿射压缩映射
-> `f_i(x) = r·x + (1−r)·v_i` 的吸引子，Hutchinson 定理保证其存在唯一性。
 
 ### 2.2 递归细分（Recursive Subdivision）
 
